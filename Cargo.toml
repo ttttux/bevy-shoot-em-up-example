@@ -1,0 +1,11 @@
+[package]
+name = "bevy_learning"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.14.2"
+config = "0.14.0"
+once_cell = "1.19.0"
+#bevy_rapier2d = { version = "0.18.0", features = [ "simd-stable" ] }
+#Enable a small amount of optimization in debug mode
