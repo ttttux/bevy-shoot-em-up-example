@@ -1,5 +1,10 @@
+#![feature(exact_size_is_empty)]
+
 use std::time::{Duration, SystemTime};
+use bevy::ecs::observer::TriggerTargets;
 use bevy::prelude::*;
+use bevy::reflect::Tuple;
+
 const BOUNDS: Vec2 = Vec2::new(1200.0, 640.0);
 
 fn main() {
@@ -11,6 +16,7 @@ fn main() {
         .add_systems(Update, player_weapons_system)
         .add_systems(Update, player_shoot_system)
         .add_systems(Update, move_enemies)
+        .add_systems(Update, enemy_kill_system)
         .run();
 }
 
@@ -79,7 +85,8 @@ struct LaserSprite;
 #[derive(Component)]
 struct Laser {
     movement_speed: f32,
-    laser_sprite: LaserSprite
+    laser_sprite: LaserSprite,
+    position: Vec3
 }
 
 #[derive(Component)]
@@ -231,14 +238,33 @@ fn player_movement_system(
     transform.translation = transform.translation.min(extents).max(-extents);
 }
 
+fn enemy_kill_system(
+    mut commands: Commands,
+    mut enemy_query: Query<(Entity, &Transform), With<Enemy>>,
+    shot_query: Query<&Transform, With<Laser>>
+) {
+    if shot_query.iter().is_empty() || enemy_query.iter().is_empty() {
+        return;
+    }
+
+    let (enemy_entity, enemy_transform) = enemy_query.single_mut();
+
+    for shot in &shot_query {
+        if enemy_transform.translation.distance(shot.translation) < 5.5 {
+            println!("target hit!");
+            commands.entity(enemy_entity).despawn();
+        }
+    }
+}
 
 fn player_weapons_system(
     time: Res<Time>,
-    mut query: Query<(&Laser, &mut Transform)>
+    mut query: Query<(&mut Laser, &mut Transform)>
 ) {
-    for (shot, mut transform) in query.iter_mut() {
+    for (mut shot, mut transform) in query.iter_mut() {
         let movement_distance_y = 2.0 * shot.movement_speed * time.delta_seconds();
         transform.translation.y += movement_distance_y;
+        shot.position.y = transform.translation.y;
 
         let extents = Vec3::from((BOUNDS / 2.0, 0.0));
         transform.translation = transform.translation.min(extents).max(-extents);
@@ -279,6 +305,7 @@ fn player_shoot_system(
                     Laser {
                         movement_speed: 500.0,
                         laser_sprite: LaserSprite,
+                        position: Vec3::new(ship.position.x, ship.position.y + 6.0, 0.0)
                     }
                 ));
             }
@@ -295,6 +322,10 @@ fn move_enemies(
     mut query: Query<(&mut Enemy, &mut Transform)>,
     ship_query: Query<(&Player)>
 ) {
+    if query.iter().is_empty() {
+        return;
+    }
+
     let (mut enemy, mut transform) = query.single_mut();
     let (ship) = ship_query.single();
 
@@ -327,3 +358,4 @@ fn move_enemies(
     let extents = Vec3::from((BOUNDS / 2.0, 0.0));
     transform.translation = transform.translation.min(extents).max(-extents);
 }
+            
