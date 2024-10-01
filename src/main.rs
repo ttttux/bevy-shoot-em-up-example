@@ -15,8 +15,9 @@ fn main() {
         .add_systems(Update, player_movement_system)
         .add_systems(Update, player_weapons_system)
         .add_systems(Update, player_shoot_system)
-        .add_systems(Update, move_enemies)
+        .add_systems(Update, enemy_movement_system)
         .add_systems(Update, enemy_kill_system)
+        .add_systems(Update, explosion_and_laser_termination_system)
         .run();
 }
 
@@ -65,6 +66,11 @@ fn execute_animations(
             config.frame_timer = AnimationConfig::timer_from_fps(config.fps);
         }
     }
+}
+
+#[derive(Component)]
+struct Explosion {
+    frame_timer: f32
 }
 
 #[derive(Component)]
@@ -241,7 +247,10 @@ fn player_movement_system(
 fn enemy_kill_system(
     mut commands: Commands,
     mut enemy_query: Query<(Entity, &Transform), With<Enemy>>,
-    shot_query: Query<&Transform, With<Laser>>
+    asset_server: Res<AssetServer>,
+    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut shot_query: Query<(Entity, &Transform), With<Laser>>,
+    mut explosion_query: Query<(Entity, &mut Explosion), With<Explosion>>
 ) {
     if shot_query.iter().is_empty() || enemy_query.iter().is_empty() {
         return;
@@ -249,10 +258,34 @@ fn enemy_kill_system(
 
     let (enemy_entity, enemy_transform) = enemy_query.single_mut();
 
-    for shot in &shot_query {
-        if enemy_transform.translation.distance(shot.translation) < 5.5 {
+    for (shot, shot_transform) in &shot_query {
+        if enemy_transform.translation.distance(shot_transform.translation) < 10.5 {
             println!("target hit!");
             commands.entity(enemy_entity).despawn();
+            commands.entity(shot).despawn();
+                let texture = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/explosion.png");
+
+                let layout = TextureAtlasLayout::from_grid(UVec2::new(80 / 5, 16), 5, 1, None, None);
+                let texture_atlas_layout = texture_atlas_layouts.add(layout);
+
+                let animation_config_1 = AnimationConfig::new(0, 4, 10);
+
+                commands.spawn((
+                    SpriteBundle {
+                        transform: Transform::from_scale(Vec3::splat(6.0))
+                            .with_translation(Vec3::new(enemy_transform.translation.x, enemy_transform.translation.y + 6.0, 0.0)),
+                        texture,
+                        ..default()
+                    },
+                    TextureAtlas {
+                        layout: texture_atlas_layout,
+                        index: animation_config_1.first_sprite_index,
+                    },
+                    animation_config_1,
+                    Explosion {
+                        frame_timer: 0.0
+                    }
+                ));
         }
     }
 }
@@ -317,7 +350,7 @@ fn now_as_u128() -> u128 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis()
 }
 
-fn move_enemies(
+fn enemy_movement_system(
     time: Res<Time>,
     mut query: Query<(&mut Enemy, &mut Transform)>,
     ship_query: Query<(&Player)>
@@ -358,4 +391,26 @@ fn move_enemies(
     let extents = Vec3::from((BOUNDS / 2.0, 0.0));
     transform.translation = transform.translation.min(extents).max(-extents);
 }
-            
+
+fn explosion_and_laser_termination_system(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Explosion), With<Explosion>>,
+    mut shot_query: Query<(Entity, &mut Laser), With<Laser>>
+) {
+    if !query.iter().is_empty() {
+        let (entity, mut explosion) = query.single_mut();
+
+        explosion.frame_timer += 1.0;
+
+        if  explosion.frame_timer > 30.0 {
+            commands.entity(entity).despawn();
+        }
+    }
+    if !shot_query.iter().is_empty() {
+        for (laser_entity, shot) in &mut shot_query {
+            if shot.position.y >= BOUNDS.y/2.0  {
+                commands.entity(laser_entity).despawn();
+            }
+        }
+    }
+}
