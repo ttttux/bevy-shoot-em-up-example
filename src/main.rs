@@ -174,7 +174,7 @@
 
         commands.spawn(
             SpawnTimer {
-                timer: 60.0
+                timer: 30.0
             }
         );
     }
@@ -375,17 +375,17 @@
         mut shot_query: Query<(Entity, &mut Laser), With<Laser>>
     ) {
         if !query.iter().is_empty() {
-            let (entity, mut explosion) = query.single_mut();
+            for (entity, mut explosion) in &mut query {
+                explosion.frame_timer += 1.0;
 
-            explosion.frame_timer += 1.0;
-
-            if  explosion.frame_timer > 30.0 {
-                commands.entity(entity).despawn();
+                if explosion.frame_timer > 30.0 {
+                    commands.entity(entity).despawn();
+                }
             }
         }
         if !shot_query.iter().is_empty() {
             for (laser_entity, shot) in &mut shot_query {
-                if shot.position.y >= BOUNDS.y/2.0  {   
+                if shot.position.y >= BOUNDS.y/2.0  {
                     commands.entity(laser_entity).despawn();
                 }
             }
@@ -477,6 +477,6 @@
         let mut spawn_timer = query.single_mut();
         spawn_timer.timer -= 1.0;
         if spawn_timer.timer < 1.0 {
-            spawn_timer.timer = 120.0;
+            spawn_timer.timer = 30.0;
         }
     }
