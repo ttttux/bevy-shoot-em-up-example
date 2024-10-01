@@ -1,10 +1,19 @@
     #![feature(exact_size_is_empty)]
+    #![feature(random)]
+    #![feature(dec2flt)]
+    extern crate core;
 
+    use core::num::dec2flt::parse;
+    use std::ops::Range;
+    use std::random::random;
     use std::time::{Duration, SystemTime};
+    use bevy::app::DynEq;
     use bevy::ecs::observer::TriggerTargets;
     use bevy::math::NormedVectorSpace;
     use bevy::prelude::*;
     use bevy::reflect::Tuple;
+    use bevy::utils::tracing::Span;
+    use rand::Rng;
 
     const BOUNDS: Vec2 = Vec2::new(1200.0, 640.0);
 
@@ -20,6 +29,8 @@
             .add_systems(Update, enemy_kill_system)
             .add_systems(Update, explosion_and_laser_termination_system)
             .add_systems(Update, player_kill_system)
+            .add_systems(Update, enemy_spawn_system)
+            .add_systems(Update, spawn_timer_system)
             .run();
     }
 
@@ -71,6 +82,11 @@
     }
 
     #[derive(Component)]
+    struct SpawnTimer {
+        timer: f32
+    }
+
+    #[derive(Component)]
     struct Explosion {
         frame_timer: f32
     }
@@ -112,59 +128,7 @@
         asset_server: Res<AssetServer>,
         mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     ) {
-        let enemy_a_handle = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/enemy-medium.png");
-        //let enemy_b_handle = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/enemy-small.png");
-
-        let layout = TextureAtlasLayout::from_grid(UVec2::new(32, 16), 2, 1, None, None);
-        let texture_atlas_layout_medium = texture_atlas_layouts.add(layout);
-
-        let animation_config_2 = AnimationConfig::new(0, 1, 10);
-
         commands.spawn(Camera2dBundle::default());
-
-        //let horizontal_margin = BOUNDS.x / 4.0;
-        //let vertical_margin = BOUNDS.y / 4.0;
-
-        commands.spawn((
-            SpriteBundle {
-                transform: Transform::from_scale(Vec3::splat(3.0))
-                    .with_translation(Vec3::new(-100.0, 300.0, 0.0)),
-                texture: enemy_a_handle.clone(),
-                ..default()
-            },
-            TextureAtlas {
-                layout: texture_atlas_layout_medium.clone(),
-                index: animation_config_2.first_sprite_index,
-            },
-            Enemy {
-                is_hit: false,
-                position: Vec3::new(-100.0, 300.0, 0.0),
-                movement_speed: 200.0,
-            }
-        ));
-
-        /*commands.spawn((
-            SpriteBundle {
-                texture: enemy_a_handle,
-                transform: Transform::from_xyz(0.0, 0.0 - vertical_margin, 0.0),
-                ..default()
-            },
-        ));
-
-        commands.spawn((
-            SpriteBundle {
-                texture: enemy_b_handle.clone(),
-                transform: Transform::from_xyz(0.0 + horizontal_margin, 0.0, 0.0),
-                ..default()
-            },
-        ));
-        commands.spawn((
-            SpriteBundle {
-                texture: enemy_b_handle,
-                transform: Transform::from_xyz(0.0, 0.0 + vertical_margin, 0.0),
-                ..default()
-            },
-        ));*/
 
         let texture = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/ship.png");
 
@@ -207,6 +171,12 @@
             },
             ..default()
         });
+
+        commands.spawn(
+            SpawnTimer {
+                timer: 60.0
+            }
+        );
     }
 
     fn player_movement_system(
@@ -262,13 +232,12 @@
             return;
         }
 
-        let (enemy_entity, enemy_transform) = enemy_query.single_mut();
-
-        for (shot, shot_transform) in &shot_query {
-            if enemy_transform.translation.y.distance(shot_transform.translation.y) < 15.5 && enemy_transform.translation.x.distance(shot_transform.translation.x) < 45.5 {
-                println!("target hit!");
-                commands.entity(enemy_entity).despawn();
-                commands.entity(shot).despawn();
+        for (enemy_entity, enemy_transform) in &enemy_query {
+            for (shot, shot_transform) in &shot_query {
+                if enemy_transform.translation.y.distance(shot_transform.translation.y) < 15.5 && enemy_transform.translation.x.distance(shot_transform.translation.x) < 45.5 {
+                    println!("target hit!");
+                    commands.entity(enemy_entity).despawn();
+                    commands.entity(shot).despawn();
                     let texture = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/explosion.png");
 
                     let layout = TextureAtlasLayout::from_grid(UVec2::new(80 / 5, 16), 5, 1, None, None);
@@ -292,6 +261,7 @@
                             frame_timer: 0.0
                         }
                     ));
+                }
             }
         }
     }
@@ -305,7 +275,7 @@
             transform.translation.y += movement_distance_y;
             shot.position.y = transform.translation.y;
 
-            let extents = Vec3::from((BOUNDS / 2.0, 0.0));
+            let extents = Vec3::from((BOUNDS, 0.0));
             transform.translation = transform.translation.min(extents).max(-extents);
         }
 
@@ -361,41 +331,42 @@
         mut query: Query<(&mut Enemy, &mut Transform)>,
         ship_query: Query<(&Player)>
     ) {
-        if query.iter().is_empty() || ship_query.iter().is_empty(){
+        if query.is_empty() || ship_query.is_empty(){
             return;
         }
 
-        let (mut enemy, mut transform) = query.single_mut();
-        let (ship) = ship_query.single();
+        for (mut enemy, mut transform) in &mut query{
+            let (ship) = ship_query.single();
 
-        let mut movement_x = 0.0;
-        let mut movement_y = 0.0;
+            let mut movement_x = 0.0;
+            let mut movement_y = 0.0;
 
-        if ship.position.x < enemy.position.x {
-            movement_x -= 1.0;
+            if ship.position.x < enemy.position.x {
+                movement_x -= 1.0;
+            }
+
+            if ship.position.x > enemy.position.x {
+                movement_x += 1.0;
+            }
+
+            if ship.position.y > enemy.position.y {
+                movement_y += 1.0;
+            }
+
+            if ship.position.y < enemy.position.y {
+                movement_y -= 1.0;
+            }
+
+            let movement_distance_x = movement_x * enemy.movement_speed * time.delta_seconds();
+            let movement_distance_y = movement_y * enemy.movement_speed * time.delta_seconds();
+            transform.translation.y += movement_distance_y;
+            transform.translation.x += movement_distance_x;
+            enemy.position.x = transform.translation.x;
+            enemy.position.y = transform.translation.y;
+
+            let extents = 640.0;
+            transform.translation.y = transform.translation.y.min(extents).max(-extents);
         }
-
-        if ship.position.x > enemy.position.x {
-            movement_x += 1.0;
-        }
-
-        if ship.position.y > enemy.position.y{
-            movement_y += 1.0;
-        }
-
-        if ship.position.y < enemy.position.y {
-            movement_y -= 1.0;
-        }
-
-        let movement_distance_x = movement_x * enemy.movement_speed * time.delta_seconds();
-        let movement_distance_y = movement_y * enemy.movement_speed * time.delta_seconds();
-        transform.translation.y += movement_distance_y;
-        transform.translation.x += movement_distance_x;
-        enemy.position.x = transform.translation.x;
-        enemy.position.y = transform.translation.y;
-
-        let extents = Vec3::from((BOUNDS / 2.0, 0.0));
-        transform.translation = transform.translation.min(extents).max(-extents);
     }
 
     fn explosion_and_laser_termination_system(
@@ -414,12 +385,13 @@
         }
         if !shot_query.iter().is_empty() {
             for (laser_entity, shot) in &mut shot_query {
-                if shot.position.y >= BOUNDS.y/2.0  {
+                if shot.position.y >= BOUNDS.y/2.0  {   
                     commands.entity(laser_entity).despawn();
                 }
             }
         }
     }
+
 
     fn player_kill_system(
         mut commands: Commands,
@@ -431,9 +403,7 @@
         if !query.iter().is_empty() && !enemy_query.iter().is_empty() {
             let (entity, player) = query.single_mut();
             for enemy in &enemy_query {
-                println!("almost almost there freeman");
                 if player.translation.y.distance(enemy.translation.y) < 15.5 && player.translation.x.distance(enemy.translation.x) < 45.5  {
-                    println!("almost there freeman");
 
                     commands.entity(entity).despawn();
                     let texture = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/explosion.png");
@@ -461,5 +431,52 @@
                     ));
                 }
             }
+        }
+    }
+
+    fn enemy_spawn_system(
+        mut commands: Commands,
+        asset_server: Res<AssetServer>,
+        mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+        query: Query<&SpawnTimer>
+    ) {
+        let spawn_timer = query.single();
+        if spawn_timer.timer <= 1.0 {
+            let enemy_a_handle = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/enemy-medium.png");
+
+            let layout = TextureAtlasLayout::from_grid(UVec2::new(32, 16), 2, 1, None, None);
+            let texture_atlas_layout_medium = texture_atlas_layouts.add(layout);
+
+            let animation_config_2 = AnimationConfig::new(0, 1, 10);
+
+            let randgennumb: f32 = rand::thread_rng().gen_range(-1200..1200).to_string().parse().unwrap();
+
+            commands.spawn((
+                SpriteBundle {
+                    transform: Transform::from_scale(Vec3::splat(3.0))
+                        .with_translation(Vec3::new(randgennumb, 640.0, 0.0)),
+                    texture: enemy_a_handle.clone(),
+                    ..default()
+                },
+                TextureAtlas {
+                    layout: texture_atlas_layout_medium.clone(),
+                    index: animation_config_2.first_sprite_index,
+                },
+                Enemy {
+                    is_hit: false,
+                    position: Vec3::new(randgennumb, 300.0, 0.0),
+                    movement_speed: 200.0,
+                }
+            ));
+        }
+    }
+
+    fn spawn_timer_system(
+        mut query: Query<&mut SpawnTimer>
+    ) {
+        let mut spawn_timer = query.single_mut();
+        spawn_timer.timer -= 1.0;
+        if spawn_timer.timer < 1.0 {
+            spawn_timer.timer = 120.0;
         }
     }
