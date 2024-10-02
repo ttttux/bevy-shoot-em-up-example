@@ -3,23 +3,19 @@
     #![feature(dec2flt)]
     extern crate core;
 
-    use core::num::dec2flt::parse;
-    use std::ops::Range;
     use std::random::random;
     use std::time::{Duration, SystemTime};
-    use bevy::app::DynEq;
-    use bevy::ecs::observer::TriggerTargets;
     use bevy::math::NormedVectorSpace;
     use bevy::prelude::*;
-    use bevy::reflect::Tuple;
-    use bevy::utils::tracing::Span;
     use rand::Rng;
+    use bevy_framepace::*;
 
     const BOUNDS: Vec2 = Vec2::new(1200.0, 640.0);
 
     fn main() {
         App::new()
             .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // prevents blurry sprites
+            .add_plugins(bevy_framepace::FramepacePlugin)
             .add_systems(Startup, setup)
             .add_systems(Update, execute_animations)
             .add_systems(Update, player_movement_system)
@@ -82,6 +78,14 @@
     }
 
     #[derive(Component)]
+    struct ScoreCounter {
+        score: f32,
+    }
+
+    #[derive(Component)]
+    struct ScoreCounterText;
+
+    #[derive(Component)]
     struct SpawnTimer {
         timer: f32
     }
@@ -127,7 +131,10 @@
         mut commands: Commands,
         asset_server: Res<AssetServer>,
         mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+        mut settings: ResMut<FramepaceSettings>
     ) {
+        settings.limiter = Limiter::from_framerate(60.0);
+
         commands.spawn(Camera2dBundle::default());
 
         let texture = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/ship.png");
@@ -177,6 +184,28 @@
                 timer: 30.0
             }
         );
+
+        commands.spawn(
+            ScoreCounter {
+                score: 0.0
+            }
+        );
+
+        commands.spawn((TextBundle {
+            text: Text::from_section(
+                "Score: 000",
+                TextStyle::default(),
+            ),
+            style: Style {
+                position_type: PositionType::Absolute,
+            top: Val::Px(640.0),
+                left: Val::Px(1100.0),
+                ..default()
+            },
+            ..default()
+        },ScoreCounter {
+            score: 0.0,
+        }));
     }
 
     fn player_movement_system(
@@ -226,16 +255,22 @@
         asset_server: Res<AssetServer>,
         mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
         mut shot_query: Query<(Entity, &Transform), With<Laser>>,
-        mut explosion_query: Query<(Entity, &mut Explosion), With<Explosion>>
+        mut text_query: Query<(&mut Text, &mut ScoreCounter)>,
     ) {
         if shot_query.iter().is_empty() || enemy_query.iter().is_empty() {
             return;
         }
 
+
         for (enemy_entity, enemy_transform) in &enemy_query {
             for (shot, shot_transform) in &shot_query {
                 if enemy_transform.translation.y.distance(shot_transform.translation.y) < 15.5 && enemy_transform.translation.x.distance(shot_transform.translation.x) < 45.5 {
-                    println!("target hit!");
+                    let (mut text_bundle,mut score_counter) = text_query.single_mut();
+
+                    score_counter.score += 1.0;
+                    let text = format!("Score: {}", score_counter.score);
+                    text_bundle.sections = Text::from_section(text, Default::default()).sections;
+
                     commands.entity(enemy_entity).despawn();
                     commands.entity(shot).despawn();
                     let texture = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/explosion.png");
