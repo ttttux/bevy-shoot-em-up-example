@@ -9,8 +9,6 @@
   <component name="ChangeListManager">
     <list default="true" id="8db04f76-81ad-4430-b3ba-dbde314f43cb" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -138,6 +136,10 @@
       <workItem from="1727764351935" duration="10342000" />
       <workItem from="1727778717092" duration="4375000" />
       <workItem from="1727847817823" duration="8408000" />
+      <workItem from="1727881122674" duration="390000" />
+      <workItem from="1727894657485" duration="335000" />
+      <workItem from="1727895066133" duration="1592000" />
+      <workItem from="1727932820986" duration="2081000" />
     </task>
     <servers />
   </component>

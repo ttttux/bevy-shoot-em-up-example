@@ -5,6 +5,7 @@
 
     use std::random::random;
     use std::time::{Duration, SystemTime};
+    use bevy::ecs::system::Adapt;
     use bevy::math::NormedVectorSpace;
     use bevy::prelude::*;
     use rand::Rng;
@@ -17,6 +18,8 @@
             .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // prevents blurry sprites
             .add_plugins(bevy_framepace::FramepacePlugin)
             .add_systems(Startup, setup)
+            .add_systems(Startup, splash_setup)
+            .add_systems(Startup, countdown)
             .add_systems(Update, execute_animations)
             .add_systems(Update, player_movement_system)
             .add_systems(Update, player_weapons_system)
@@ -76,6 +79,16 @@
             }
         }
     }
+
+    #[derive(Component)]
+    #[derive(Default)]
+    enum GameStateEnum {
+        #[default]
+        Splash,
+        Menu,
+        Game,
+    }
+
 
     #[derive(Component)]
     struct ScoreCounter {
@@ -515,3 +528,64 @@
             spawn_timer.timer = 30.0;
         }
     }
+
+    // Splash screen logic
+    #[derive(Component)]
+    struct OnSplashScreen;
+
+    #[derive(Resource, Deref, DerefMut)]
+    struct SplashTimer(Timer);
+
+    fn splash_setup(
+        mut commands: Commands,
+        asset_server: Res<AssetServer>,
+    ) {
+        commands.spawn(
+            GameStateEnum::Splash
+        );
+
+        let icon = asset_server.load("branding/icon.png");
+        commands
+            .spawn((
+                NodeBundle {
+                    style: Style {
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::Center,
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    ..default()
+                },
+                OnSplashScreen,
+            ))
+            .with_children(|parent| {
+                parent.spawn(ImageBundle {
+                    style: Style {
+                        width: Val::Px(200.0),
+                        ..default()
+                    },
+                    image: UiImage::new(icon),
+                    ..default()
+                });
+            });
+        commands.insert_resource(SplashTimer(Timer::from_seconds(1.0, TimerMode::Once)));
+    }
+
+    fn countdown(
+        mut game_state_query: Query<&mut GameStateEnum>,
+        time: Res<Time>,
+    ) {
+        let mut game_state = game_state_query.single_mut();
+        if SplashTimer.tick(time.delta()).finished() {
+            let mut pinned = std::pin::pin!(game_state.as_mut());
+            pinned.as_mut().set(&mut GameStateEnum::Menu);
+        }
+    }
+
+    // Game screen logic
+    #[derive(Component)]
+    struct OnGameScreen;
+
+    #[derive(Resource, Deref, DerefMut)]
+    struct GameTimer(Timer);
