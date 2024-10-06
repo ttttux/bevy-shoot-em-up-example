@@ -4,10 +4,8 @@
     extern crate core;
 
     use std::random::random;
-    use std::thread;
     use std::time::{Duration, SystemTime};
     use bevy::color::palettes::css::{CRIMSON, WHITE};
-    use bevy::ecs::system::Adapt;
     use bevy::math::NormedVectorSpace;
     use bevy::prelude::*;
     use rand::Rng;
@@ -17,22 +15,18 @@
 
     fn main() {
         App::new()
-            .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // prevents blurry sprites
+            .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))// prevents blurry sprites
             .add_plugins(bevy_framepace::FramepacePlugin)
             .init_state::<GameState>()
             .init_state::<MenuState>()
-            .add_systems(OnEnter(GameState::Over), menu_setup)
-            // Systems to handle the main menu screen
-            .add_systems(OnEnter(GameState::Over), main_menu_setup)
-            .add_systems(OnExit(GameState::Over), despawn_screen::<OnMainMenuScreen>)
+            .add_systems(OnEnter(GameState::Splash), menu_setup)
+            .add_systems(OnEnter(MenuState::Main), main_menu_setup)
             .add_systems(
                 Update,
-                (menu_action, button_system).run_if(in_state(GameState::Over)),
+                (menu_action, button_system).run_if(in_state(GameState::Splash)),
             )
         .add_systems(Startup, setup)
             .add_systems(Startup, splash_setup)
-            .add_systems(Startup, menu_setup)
-            .add_systems(OnEnter(GameState::Over), main_menu_setup)
             .add_systems(Update, countdown.after(splash_setup))
             .add_systems(Update, execute_animations)
             .add_systems(Update, player_movement_system)
@@ -44,7 +38,7 @@
             .add_systems(Update, player_kill_system)
             .add_systems(Update, enemy_spawn_system)
             .add_systems(Update, spawn_timer_system)
-            .add_systems(Update, (menu_action, button_system).run_if(in_state(GameState::Over)))
+            .add_systems(Update, save_menu)
         .run();
     }
 
@@ -151,8 +145,6 @@
         Game,
         Over
     }
-
-
 
     #[derive(Component)]
     struct ScoreCounter {
@@ -644,8 +636,8 @@
     ) {
             if let Some(mut timer) = timer {
                 if timer.tick(time.delta()).finished() {
-                    game_state.set(GameState::Game);
                     for image in &mut query {
+                        game_state.set(GameState::Game);
                         commands.entity(image).despawn();
                     }
                 }
@@ -657,41 +649,18 @@
     #[derive(Component)]
     struct OnGameScreen;
 
-    #[derive(Resource, Deref, DerefMut)]
-    struct GameTimer(Timer);
-
-    // This system handles changing all buttons color based on mouse interaction
     fn button_system(
         mut interaction_query: Query<
-            (&Interaction, &mut UiImage, Option<&SelectedOption>),
+            (&Interaction, &mut BackgroundColor, Option<&SelectedOption>),
             (Changed<Interaction>, With<Button>),
         >,
     ) {
-        for (interaction, mut image, selected) in &mut interaction_query {
-            image.color = match (*interaction, selected) {
-                (Interaction::Pressed, _) | (Interaction::None, Some(_)) => PRESSED_BUTTON,
-                (Interaction::Hovered, Some(_)) => HOVERED_PRESSED_BUTTON,
-                (Interaction::Hovered, None) => HOVERED_BUTTON,
-                (Interaction::None, None) => NORMAL_BUTTON,
-            }
-        }
-    }
-
-    // This system updates the settings when a new value for a setting is selected, and marks
-    // the button as the one currently selected
-    fn setting_button<T: Resource + Component + PartialEq + Copy>(
-        interaction_query: Query<(&Interaction, &T, Entity), (Changed<Interaction>, With<Button>)>,
-        mut selected_query: Query<(Entity, &mut UiImage), With<SelectedOption>>,
-        mut commands: Commands,
-        mut setting: ResMut<T>,
-    ) {
-        for (interaction, button_setting, entity) in &interaction_query {
-            if *interaction == Interaction::Pressed && *setting != *button_setting {
-                let (previous_button, mut previous_image) = selected_query.single_mut();
-                previous_image.color = NORMAL_BUTTON;
-                commands.entity(previous_button).remove::<SelectedOption>();
-                commands.entity(entity).insert(SelectedOption);
-                *setting = *button_setting;
+        for (interaction, mut background_color, selected) in &mut interaction_query {
+            *background_color = match (*interaction, selected) {
+                (Interaction::Pressed, _) | (Interaction::None, Some(_)) => PRESSED_BUTTON.into(),
+                (Interaction::Hovered, Some(_)) => HOVERED_PRESSED_BUTTON.into(),
+                (Interaction::Hovered, None) => HOVERED_BUTTON.into(),
+                (Interaction::None, None) => NORMAL_BUTTON.into(),
             }
         }
     }
@@ -701,6 +670,7 @@
     }
 
     fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+        // Common style for all buttons on the screen
         let button_style = Style {
             width: Val::Px(250.0),
             height: Val::Px(65.0),
@@ -711,7 +681,9 @@
         };
         let button_icon_style = Style {
             width: Val::Px(30.0),
+            // This takes the icons out of the flexbox flow, to be positioned exactly
             position_type: PositionType::Absolute,
+            // The icon will be close to the left border of the button
             left: Val::Px(10.0),
             ..default()
         };
@@ -747,9 +719,10 @@
                         ..default()
                     })
                     .with_children(|parent| {
+                        // Display the game name
                         parent.spawn(
                             TextBundle::from_section(
-                                "Bevy Game Menu UI",
+                                "Game Over",
                                 TextStyle {
                                     font_size: 80.0,
                                     color: WHITE.into(),
@@ -762,6 +735,10 @@
                                 }),
                         );
 
+                        // Display three buttons for each action available from the main menu:
+                        // - new game
+                        // - settings
+                        // - quit
                         parent
                             .spawn((
                                 ButtonBundle {
@@ -826,18 +803,16 @@
             });
     }
 
-
     fn menu_action(
-        interaction_query: Query<
-            (&Interaction, &MenuButtonAction),
-            (Changed<Interaction>, With<Button>),
-        >,
+        interaction_query: Query<(&Interaction, &MenuButtonAction), (Changed<Interaction>, With<Button>)>,
         mut app_exit_events: EventWriter<AppExit>,
         mut menu_state: ResMut<NextState<MenuState>>,
         mut game_state: ResMut<NextState<GameState>>,
+        mut commands: Commands,
     ) {
         for (interaction, menu_button_action) in &interaction_query {
             if *interaction == Interaction::Pressed {
+
                 match menu_button_action {
                     MenuButtonAction::Quit => {
                         app_exit_events.send(AppExit::Success);
@@ -846,7 +821,17 @@
                         game_state.set(GameState::Game);
                         menu_state.set(MenuState::Disabled);
                     }
-                    _ => {}
+                    MenuButtonAction::Settings => menu_state.set(MenuState::Settings),
+                    MenuButtonAction::SettingsDisplay => {
+                        menu_state.set(MenuState::SettingsDisplay);
+                    }
+                    MenuButtonAction::SettingsSound => {
+                        menu_state.set(MenuState::SettingsSound);
+                    }
+                    MenuButtonAction::BackToMainMenu => menu_state.set(MenuState::Main),
+                    MenuButtonAction::BackToSettings => {
+                        menu_state.set(MenuState::Settings);
+                    }
                 }
             }
         }
@@ -857,4 +842,11 @@
         for entity in &to_despawn {
             commands.entity(entity).despawn_recursive();
         }
+    }
+
+    fn save_menu(
+        manu_state: Res<NextState<MenuState>>,
+        game_state: Res<NextState<GameState>>
+    ) {
+
     }
