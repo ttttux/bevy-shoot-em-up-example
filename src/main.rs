@@ -10,6 +10,7 @@
     use bevy::prelude::*;
     use rand::Rng;
     use bevy_framepace::*;
+    use config::Value;
 
     const BOUNDS: Vec2 = Vec2::new(1200.0, 640.0);
 
@@ -19,26 +20,23 @@
             .add_plugins(bevy_framepace::FramepacePlugin)
             .init_state::<GameState>()
             .init_state::<MenuState>()
-            .add_systems(OnEnter(GameState::Splash), menu_setup)
+            .add_systems(Startup, setup_camera)
+            .add_systems(OnEnter(GameState::Over), menu_setup)
             .add_systems(OnEnter(MenuState::Main), main_menu_setup)
-            .add_systems(
-                Update,
-                (menu_action, button_system).run_if(in_state(GameState::Splash)),
-            )
-        .add_systems(Startup, setup)
+            .add_systems(Update, (menu_action, button_system).run_if(in_state(GameState::Over)))
+            .add_systems(OnEnter(GameState::Game), setup)
             .add_systems(Startup, splash_setup)
             .add_systems(Update, countdown.after(splash_setup))
-            .add_systems(Update, execute_animations)
-            .add_systems(Update, player_movement_system)
-            .add_systems(Update, player_weapons_system)
-            .add_systems(Update, player_shoot_system)
-            .add_systems(Update, enemy_movement_system)
-            .add_systems(Update, enemy_kill_system)
-            .add_systems(Update, explosion_and_laser_termination_system)
-            .add_systems(Update, player_kill_system)
-            .add_systems(Update, enemy_spawn_system)
-            .add_systems(Update, spawn_timer_system)
-            .add_systems(Update, save_menu)
+            .add_systems(Update, execute_animations.after(setup))
+            .add_systems(Update, player_movement_system.after(setup))
+            .add_systems(Update, player_weapons_system.after(setup))
+            .add_systems(Update, player_shoot_system.after(setup))
+            .add_systems(Update, enemy_movement_system.after(setup))
+            .add_systems(Update, enemy_kill_system.after(setup))
+            .add_systems(Update, explosion_and_laser_termination_system.after(setup))
+            .add_systems(Update, player_kill_system.after(setup))
+            .add_systems(Update, enemy_spawn_system.after(setup))
+            .add_systems(Update, spawn_timer_system.after(setup))
         .run();
     }
 
@@ -196,6 +194,12 @@
         position: Vec3
     }
 
+    fn setup_camera(
+        mut commands: Commands
+    ) {
+        commands.spawn(Camera2dBundle::default());
+    }
+
     fn setup(
         mut commands: Commands,
         asset_server: Res<AssetServer>,
@@ -203,8 +207,6 @@
         mut settings: ResMut<FramepaceSettings>
     ) {
         settings.limiter = Limiter::from_framerate(60.0);
-
-        commands.spawn(Camera2dBundle::default());
 
         let texture = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/ship.png");
 
@@ -547,6 +549,10 @@
         mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
         query: Query<&SpawnTimer>
     ) {
+        if query.is_empty() {
+            return;
+        }
+
         let spawn_timer = query.single();
         if spawn_timer.timer <= 1.0 {
             let enemy_a_handle = asset_server.load("Spaceship-shooter-gamekit/Assets/spritesheets/enemy-medium.png");
@@ -575,12 +581,16 @@
                     movement_speed: 200.0,
                 }
             ));
-        }
+        }   
     }
 
     fn spawn_timer_system(
         mut query: Query<&mut SpawnTimer>
     ) {
+        if query.is_empty() {
+            return;
+        }
+
         let mut spawn_timer = query.single_mut();
         spawn_timer.timer -= 1.0;
         if spawn_timer.timer < 1.0 {
@@ -622,6 +632,18 @@
                     image: UiImage::new(icon),
                     ..default()
                 });
+            })
+            .with_children(|parent| {
+                parent.spawn(
+                    TextBundle::from_section(
+                        "made with bevy",
+                        TextStyle {
+                            font_size: 80.0,
+                            color: WHITE.into(),
+                            ..default()
+                        },
+                    ),
+                );
             });
         commands.insert_resource(SplashTimer(Timer::from_seconds(1.0, TimerMode::Once)));
     }
@@ -632,13 +654,22 @@
         mut game_state: ResMut<NextState<GameState>>,
         time: Res<Time>,
         mut timer: Option<ResMut<SplashTimer>>,
-        mut query: Query<Entity, With<UiImage>>
+        mut query: Query<Entity, With<UiImage>>,
+        mut text_query: Query<Entity, With<Text>>
     ) {
+        if timer.is_none() {
+            return;
+        }
+
             if let Some(mut timer) = timer {
                 if timer.tick(time.delta()).finished() {
                     for image in &mut query {
                         game_state.set(GameState::Game);
                         commands.entity(image).despawn();
+                        commands.remove_resource::<SplashTimer>();
+                    }
+                    for text in &mut text_query {
+                        commands.entity(text).despawn();
                     }
                 }
             } else {
@@ -749,55 +780,14 @@
                                 MenuButtonAction::Play,
                             ))
                             .with_children(|parent| {
-                                let icon = asset_server.load("textures/Game Icons/right.png");
                                 parent.spawn(ImageBundle {
                                     style: button_icon_style.clone(),
-                                    image: UiImage::new(icon),
                                     ..default()
                                 });
                                 parent.spawn(TextBundle::from_section(
                                     "New Game",
                                     button_text_style.clone(),
                                 ));
-                            });
-                        parent
-                            .spawn((
-                                ButtonBundle {
-                                    style: button_style.clone(),
-                                    background_color: NORMAL_BUTTON.into(),
-                                    ..default()
-                                },
-                                MenuButtonAction::Settings,
-                            ))
-                            .with_children(|parent| {
-                                let icon = asset_server.load("textures/Game Icons/wrench.png");
-                                parent.spawn(ImageBundle {
-                                    style: button_icon_style.clone(),
-                                    image: UiImage::new(icon),
-                                    ..default()
-                                });
-                                parent.spawn(TextBundle::from_section(
-                                    "Settings",
-                                    button_text_style.clone(),
-                                ));
-                            });
-                        parent
-                            .spawn((
-                                ButtonBundle {
-                                    style: button_style,
-                                    background_color: NORMAL_BUTTON.into(),
-                                    ..default()
-                                },
-                                MenuButtonAction::Quit,
-                            ))
-                            .with_children(|parent| {
-                                let icon = asset_server.load("textures/Game Icons/exitRight.png");
-                                parent.spawn(ImageBundle {
-                                    style: button_icon_style,
-                                    image: UiImage::new(icon),
-                                    ..default()
-                                });
-                                parent.spawn(TextBundle::from_section("Quit", button_text_style));
                             });
                     });
             });
@@ -848,5 +838,5 @@
         manu_state: Res<NextState<MenuState>>,
         game_state: Res<NextState<GameState>>
     ) {
-
+        //println!("{:?}", manu_state);
     }
