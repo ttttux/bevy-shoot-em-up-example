@@ -22,9 +22,11 @@
             .init_state::<MenuState>()
             .add_systems(Startup, setup_camera)
             .add_systems(OnEnter(GameState::Over), menu_setup)
-            .add_systems(OnEnter(MenuState::Main), main_menu_setup)
+            .add_systems(OnEnter(GameState::Over), main_menu_setup)
             .add_systems(Update, (menu_action, button_system).run_if(in_state(GameState::Over)))
             .add_systems(OnEnter(GameState::Game), setup)
+            .add_systems(OnExit(GameState::Game), clear_after_game_over)
+            .add_systems(OnExit(GameState::Over), despawn_screen::<OnMainMenuScreen>)       
             .add_systems(Startup, splash_setup)
             .add_systems(Update, countdown.after(splash_setup))
             .add_systems(Update, execute_animations.after(setup))
@@ -833,3 +835,21 @@
             commands.entity(entity).despawn_recursive();
         }
     }
+
+    fn clear_after_game_over(
+        mut commands: Commands,
+        mut query: Query<Entity, With<SpawnTimer>>,
+        mut enemy_query: Query<Entity, With<Enemy>>,
+        mut score_counter_query: Query<Entity, With<ScoreCounter>>,
+    ) {
+        for (spawn_timer) in &mut query {
+                commands.entity(spawn_timer).despawn();
+        }
+        for (enemy) in &mut enemy_query {
+            commands.entity(enemy).despawn();
+        }
+        for (score_counter) in &mut score_counter_query {
+            commands.entity(score_counter).despawn();
+    }
+    }
+ 
