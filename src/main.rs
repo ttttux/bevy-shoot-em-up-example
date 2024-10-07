@@ -581,7 +581,7 @@
                     movement_speed: 200.0,
                 }
             ));
-        }   
+        }
     }
 
     fn spawn_timer_system(
@@ -832,11 +832,4 @@
         for entity in &to_despawn {
             commands.entity(entity).despawn_recursive();
         }
-    }
-
-    fn save_menu(
-        manu_state: Res<NextState<MenuState>>,
-        game_state: Res<NextState<GameState>>
-    ) {
-        //println!("{:?}", manu_state);
     }
