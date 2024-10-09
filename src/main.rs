@@ -9,8 +9,7 @@
     use bevy::math::NormedVectorSpace;
     use bevy::prelude::*;
     use rand::Rng;
-    use bevy_framepace::*;
-    use config::Value;
+    use bevy_framepace::*;  
 
     const BOUNDS: Vec2 = Vec2::new(1200.0, 640.0);
 
@@ -26,7 +25,7 @@
             .add_systems(Update, (menu_action, button_system).run_if(in_state(GameState::Over)))
             .add_systems(OnEnter(GameState::Game), setup)
             .add_systems(OnExit(GameState::Game), clear_after_game_over)
-            .add_systems(OnExit(GameState::Over), despawn_screen::<OnMainMenuScreen>)       
+        .add_systems(OnExit(GameState::Over), despawn_screen::<OnMainMenuScreen>)
             .add_systems(Startup, splash_setup)
             .add_systems(Update, countdown.after(splash_setup))
             .add_systems(Update, execute_animations.after(setup))
@@ -98,19 +97,15 @@
         Disabled,
     }
 
-    // Tag component used to tag entities added on the main menu screen
     #[derive(Component)]
     struct OnMainMenuScreen;
 
-    // Tag component used to tag entities added on the settings menu screen
     #[derive(Component)]
     struct OnSettingsMenuScreen;
 
-    // Tag component used to tag entities added on the display settings menu screen
     #[derive(Component)]
     struct OnDisplaySettingsMenuScreen;
 
-    // Tag component used to tag entities added on the sound settings menu screen
     #[derive(Component)]
     struct OnSoundSettingsMenuScreen;
 
@@ -120,11 +115,9 @@
     const HOVERED_PRESSED_BUTTON: Color = Color::srgb(0.25, 0.65, 0.25);
     const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 
-    // Tag component used to mark which setting is currently selected
     #[derive(Component)]
     struct SelectedOption;
 
-    // All actions that can be triggered from a button click
     #[derive(Component)]
     enum MenuButtonAction {
         Play,
@@ -445,30 +438,21 @@
 
         for (mut enemy, mut transform) in &mut query{
             let (ship) = ship_query.single();
+            let direction_x = ship.position.x - enemy.position.x;
+            let direction_y = ship.position.y - enemy.position.y;
 
-            let mut movement_x = 0.0;
-            let mut movement_y = 0.0;
+            let angle = direction_y.atan2(direction_x);
 
-            if ship.position.x < enemy.position.x {
-                movement_x -= 1.0;
-            }
 
-            if ship.position.x > enemy.position.x {
-                movement_x += 1.0;
-            }
+            let normalized_x = angle.cos();
+            let normalized_y = angle.sin();
 
-            if ship.position.y > enemy.position.y {
-                movement_y += 1.0;
-            }
+            let movement_distance_x = normalized_x * enemy.movement_speed * time.delta_seconds();
+            let movement_distance_y = normalized_y * enemy.movement_speed * time.delta_seconds();
 
-            if ship.position.y < enemy.position.y {
-                movement_y -= 1.0;
-            }
-
-            let movement_distance_x = movement_x * enemy.movement_speed * time.delta_seconds();
-            let movement_distance_y = movement_y * enemy.movement_speed * time.delta_seconds();
-            transform.translation.y += movement_distance_y;
             transform.translation.x += movement_distance_x;
+            transform.translation.y += movement_distance_y;
+
             enemy.position.x = transform.translation.x;
             enemy.position.y = transform.translation.y;
 
@@ -580,7 +564,7 @@
                 Enemy {
                     is_hit: false,
                     position: Vec3::new(randgennumb, 300.0, 0.0),
-                    movement_speed: 200.0,
+                    movement_speed: 250.0,
                 }
             ));
         }
@@ -603,13 +587,11 @@
     #[derive(Component)]
     struct OnSplashScreen;
 
-    // Newtype to use a `Timer` for this screen as a resource
     #[derive(Resource, Deref, DerefMut)]
     struct SplashTimer(Timer);
 
     fn splash_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         let icon = asset_server.load("branding/icon.png");
-        // Display the logo
         commands
             .spawn((
                 NodeBundle {
@@ -627,7 +609,6 @@
             .with_children(|parent| {
                 parent.spawn(ImageBundle {
                     style: Style {
-                        // This will set the logo to be 200px wide, and auto adjust its height
                         width: Val::Px(200.0),
                         ..default()
                     },
@@ -703,7 +684,6 @@
     }
 
     fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-        // Common style for all buttons on the screen
         let button_style = Style {
             width: Val::Px(250.0),
             height: Val::Px(65.0),
@@ -714,9 +694,7 @@
         };
         let button_icon_style = Style {
             width: Val::Px(30.0),
-            // This takes the icons out of the flexbox flow, to be positioned exactly
             position_type: PositionType::Absolute,
-            // The icon will be close to the left border of the button
             left: Val::Px(10.0),
             ..default()
         };
@@ -768,10 +746,6 @@
                                 }),
                         );
 
-                        // Display three buttons for each action available from the main menu:
-                        // - new game
-                        // - settings
-                        // - quit
                         parent
                             .spawn((
                                 ButtonBundle {
@@ -829,7 +803,6 @@
         }
     }
 
-    // Generic system that takes a component as a parameter, and will despawn all entities with that component
     fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {
         for entity in &to_despawn {
             commands.entity(entity).despawn_recursive();
